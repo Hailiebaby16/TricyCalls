@@ -1,0 +1,13 @@
+{
+  "name": "tricycall-workspace",
+  "private": true,
+  "workspaces": [
+    "tricycall/mobile",
+    "tricycall/backend"
+  ],
+  "scripts": {
+    "mobile": "npm --workspace tricycall/mobile run start",
+    "backend": "npm --workspace tricycall/backend run dev",
+    "test:backend": "npm --workspace tricycall/backend test"
+  }
+}
