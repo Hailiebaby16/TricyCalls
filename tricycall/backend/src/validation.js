@@ -47,6 +47,22 @@ export function validateLocation(value, fieldName) {
   };
 }
 
+
+export function validateLoginRequest(body) {
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+
+  if (!email || !email.includes('@')) {
+    throw createHttpError(422, 'VALIDATION_ERROR', 'Email must be valid');
+  }
+
+  if (password.length < 8) {
+    throw createHttpError(422, 'VALIDATION_ERROR', 'Password must be at least 8 characters');
+  }
+
+  return { email, password };
+}
+
 export function validateRideRequest(body) {
   const passengerName =
     typeof body.passengerName === 'string' && body.passengerName.trim()

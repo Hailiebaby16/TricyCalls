@@ -1,4 +1,4 @@
-import type { CreateRideInput, FareEstimate, LocationPoint, Ride } from '../types';
+import type { CreateRideInput, FareEstimate, LocationPoint, LoginResponse, Ride } from '../types';
 
 export const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -6,6 +6,14 @@ type FareEstimateInput = {
   pickup: LocationPoint;
   dropoff: LocationPoint;
 };
+
+
+export async function loginUser(input: { email: string; password: string }): Promise<LoginResponse> {
+  return request<LoginResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+}
 
 export async function estimateFare(input: FareEstimateInput): Promise<FareEstimate> {
   return request<FareEstimate>('/api/fare-estimates', {

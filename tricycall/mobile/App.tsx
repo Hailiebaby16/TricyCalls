@@ -23,9 +23,9 @@ import {
 } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
-import { apiUrl, createRide, estimateFare } from './src/api/client';
+import { apiUrl, createRide, estimateFare, loginUser } from './src/api/client';
 import { locations, nearbyDrivers, recentRides } from './src/data/mockData';
-import type { FareEstimate, LocationPoint, Ride } from './src/types';
+import type { AuthUser, FareEstimate, LocationPoint, Ride } from './src/types';
 
 type Tab = 'book' | 'rides';
 type RouteField = 'pickup' | 'dropoff';
@@ -85,6 +85,10 @@ export default function App() {
   const [pickup, setPickup] = useState<LocationPoint>(locations[0]);
   const [dropoff, setDropoff] = useState<LocationPoint>(locations[1]);
   const [passengerName, setPassengerName] = useState('Guest Passenger');
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [loginEmail, setLoginEmail] = useState('ana@example.com');
+  const [loginPassword, setLoginPassword] = useState('password123');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [notes, setNotes] = useState('');
   const [fare, setFare] = useState<FareEstimate | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
@@ -224,6 +228,27 @@ export default function App() {
     }
   }
 
+  async function handleLogin() {
+    setIsLoggingIn(true);
+    try {
+      const session = await loginUser({ email: loginEmail, password: loginPassword });
+      setAuthUser(session.user);
+      setPassengerName(session.user.name);
+      setApiStatus('ok');
+    } catch (error) {
+      setApiStatus('offline');
+      Alert.alert('Login failed', error instanceof Error ? error.message : `Check your credentials and make sure Expo can reach ${apiUrl}.`);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  function handleLogout() {
+    setAuthUser(null);
+    setPassengerName('Guest Passenger');
+    setTab('book');
+  }
+
   async function handleBookRide() {
     setIsLoading(true);
     try {
@@ -253,7 +278,62 @@ export default function App() {
     }
   }
 
-  const canBook = pickup.id !== dropoff.id && !isLoading;
+  const canBook = Boolean(authUser) && pickup.id !== dropoff.id && !isLoading;
+
+  if (!authUser) {
+    return (
+      <PaperProvider theme={paperTheme}>
+        <SafeAreaView style={styles.shell}>
+          <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+          <View style={styles.loginHero}>
+            <Text style={styles.brand}>Tricycall</Text>
+            <Text style={styles.subtitle}>Sign in to book barangay tricycle rides.</Text>
+          </View>
+          <View style={styles.loginContent}>
+            <Card mode="outlined" style={styles.loginCard}>
+              <Card.Content style={styles.loginCardContent}>
+                <MaterialCommunityIcons name="account-circle" size={46} color={colors.primary} />
+                <Text style={styles.loginTitle}>Passenger login</Text>
+                <Text style={styles.loginHint}>Use the demo passenger account to continue.</Text>
+                <PaperTextInput
+                  value={loginEmail}
+                  onChangeText={setLoginEmail}
+                  label="Email"
+                  mode="outlined"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  style={styles.input}
+                  outlineStyle={styles.paperInputOutline}
+                />
+                <PaperTextInput
+                  value={loginPassword}
+                  onChangeText={setLoginPassword}
+                  label="Password"
+                  mode="outlined"
+                  secureTextEntry
+                  style={styles.input}
+                  outlineStyle={styles.paperInputOutline}
+                />
+                <PaperButton
+                  mode="contained"
+                  icon="login"
+                  loading={isLoggingIn}
+                  disabled={isLoggingIn}
+                  onPress={handleLogin}
+                  style={styles.loginButton}
+                  buttonColor={colors.accent}
+                  textColor={colors.accentText}
+                >
+                  Sign in
+                </PaperButton>
+                <Text style={styles.loginFootnote}>Demo: ana@example.com / password123</Text>
+              </Card.Content>
+            </Card>
+          </View>
+        </SafeAreaView>
+      </PaperProvider>
+    );
+  }
 
   return (
     <PaperProvider theme={paperTheme}>
@@ -262,17 +342,22 @@ export default function App() {
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={styles.brand}>Tricycall</Text>
-          <Text style={styles.subtitle}>Barangay tricycle rides, dispatched fast.</Text>
+          <Text style={styles.subtitle}>Hi {authUser.name}, barangay rides dispatched fast.</Text>
         </View>
-        <Chip
-          compact
-          icon={apiStatus === 'offline' ? 'cloud-off-outline' : 'check-circle-outline'}
-          mode="flat"
-          style={[styles.statusPill, apiStatus === 'offline' && styles.statusPillOffline]}
-          textStyle={styles.statusText}
-        >
-          {apiStatus === 'offline' ? 'Offline' : 'Ready'}
-        </Chip>
+        <View style={styles.headerActions}>
+          <Chip
+            compact
+            icon={apiStatus === 'offline' ? 'cloud-off-outline' : 'check-circle-outline'}
+            mode="flat"
+            style={[styles.statusPill, apiStatus === 'offline' && styles.statusPillOffline]}
+            textStyle={styles.statusText}
+          >
+            {apiStatus === 'offline' ? 'Offline' : 'Ready'}
+          </Chip>
+          <Pressable accessibilityRole="button" onPress={handleLogout} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -314,6 +399,7 @@ export default function App() {
                 <PaperTextInput
                   value={passengerName}
                   onChangeText={setPassengerName}
+                  editable={false}
                   label="Passenger"
                   mode="outlined"
                   style={styles.input}
@@ -918,6 +1004,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.primary
   },
+  loginHero: {
+    paddingHorizontal: 24,
+    paddingTop: 56,
+    paddingBottom: 28,
+    backgroundColor: colors.primary,
+    gap: 8
+  },
+  loginContent: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: colors.background
+  },
+  loginCard: {
+    borderRadius: 12,
+    borderColor: colors.border,
+    backgroundColor: colors.surface
+  },
+  loginCardContent: {
+    gap: 14
+  },
+  loginTitle: {
+    color: colors.text,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '800'
+  },
+  loginHint: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20
+  },
+  loginButton: {
+    borderRadius: 8,
+    marginTop: 4
+  },
+  loginFootnote: {
+    color: colors.muted,
+    fontSize: 12,
+    textAlign: 'center'
+  },
   header: {
     paddingHorizontal: 12,
     paddingTop: 14,
@@ -931,6 +1057,23 @@ const styles = StyleSheet.create({
   headerCopy: {
     flex: 1,
     minWidth: 0
+  },
+  headerActions: {
+    alignItems: 'flex-end',
+    gap: 6
+  },
+  logoutButton: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  logoutText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800'
   },
   brand: {
     color: colors.white,

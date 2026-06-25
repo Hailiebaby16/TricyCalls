@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { URL } from 'node:url';
+import { authenticateUser } from './auth.js';
 import { barangays, drivers } from './data.js';
 import { createMongoRideStore } from './mongoStore.js';
 import { estimateRouteFare } from './osrm.js';
 import { createRealtimeHub, sendExpoPush } from './realtime.js';
 import { createRideStore } from './store.js';
-import { createHttpError, parseJsonBody, validateLocation, validateRideRequest } from './validation.js';
+import { createHttpError, parseJsonBody, validateLocation, validateLoginRequest, validateRideRequest } from './validation.js';
 
 loadEnvFiles();
 
@@ -43,6 +44,12 @@ async function route(req, res, rideStore, realtime) {
 
   if (req.method === 'GET' && url.pathname === '/api/locations') {
     sendJson(res, 200, { data: barangays });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+    const body = await parseJsonBody(req);
+    sendJson(res, 200, authenticateUser(validateLoginRequest(body)));
     return;
   }
 
@@ -218,7 +225,7 @@ function sendJson(res, status, payload) {
   res.writeHead(status, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Content-Type': 'application/json'
   });
 
