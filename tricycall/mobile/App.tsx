@@ -1,7 +1,6 @@
 import { createElement, useEffect, useMemo, useState } from 'react';
 import * as Location from 'expo-location';
 import {
-  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -10,40 +9,75 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  ActivityIndicator as PaperActivityIndicator,
+  Button as PaperButton,
+  Card,
+  Chip,
+  MD3LightTheme,
+  PaperProvider,
+  TextInput as PaperTextInput
+} from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
-import { createRide, estimateFare } from './src/api/client';
+import { apiUrl, createRide, estimateFare } from './src/api/client';
 import { locations, nearbyDrivers, recentRides } from './src/data/mockData';
 import type { FareEstimate, LocationPoint, Ride } from './src/types';
 
 type Tab = 'book' | 'rides';
 type RouteField = 'pickup' | 'dropoff';
 type PinDirection = 'north' | 'south' | 'east' | 'west';
+type PendingPin = {
+  field: RouteField;
+  location: LocationPoint;
+};
 const PIN_STEP_DEGREES = 0.00025;
 const colors = {
-  background: '#F4F7FB',
+  background: '#FFF7F7',
   surface: '#FFFFFF',
-  surfaceAlt: '#EAF2F8',
-  surfaceTint: '#F8FBFD',
-  border: '#D7E2EA',
-  borderStrong: '#B8CBD8',
-  text: '#102027',
-  muted: '#60717A',
-  primary: '#006B5E',
-  primarySoft: '#DDF3EF',
-  accent: '#FFB703',
-  accentText: '#2A1800',
-  success: '#1F8A5B',
-  successSoft: '#E3F6ED',
-  danger: '#D94A3A',
-  dangerSoft: '#FFE6D6',
-  warning: '#C96A18',
-  mapCanvas: '#DCEBE5',
+  surfaceAlt: '#FDECEC',
+  surfaceTint: '#FFFAFA',
+  border: '#F0CACA',
+  borderStrong: '#D99A9A',
+  text: '#201314',
+  muted: '#746061',
+  primary: '#B42318',
+  primarySoft: '#FEE4E2',
+  accent: '#B42318',
+  accentText: '#FFFFFF',
+  success: '#C92A2A',
+  successSoft: '#FFF1F1',
+  danger: '#7A1510',
+  dangerSoft: '#FFE4E1',
+  warning: '#9F1D16',
+  mapCanvas: '#F8E7E5',
+  onPrimary: '#FFFFFF',
   white: '#FFFFFF'
+};
+const paperTheme = {
+  ...MD3LightTheme,
+  roundness: 2,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: colors.primary,
+    onPrimary: colors.onPrimary,
+    secondary: colors.accent,
+    tertiary: colors.success,
+    primaryContainer: colors.primarySoft,
+    secondaryContainer: colors.primarySoft,
+    onPrimaryContainer: colors.primary,
+    onSecondaryContainer: colors.primary,
+    background: colors.background,
+    surface: colors.surface,
+    surfaceVariant: colors.surfaceAlt,
+    onSurface: colors.text,
+    onSurfaceVariant: colors.muted,
+    outline: colors.borderStrong,
+    error: colors.danger
+  }
 };
 
 export default function App() {
@@ -59,6 +93,7 @@ export default function App() {
   const [activeRouteField, setActiveRouteField] = useState<RouteField>('dropoff');
   const [locationQuery, setLocationQuery] = useState('');
   const [isLocating, setIsLocating] = useState(false);
+  const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
 
   const rideHistory = useMemo(() => {
     return activeRide ? [activeRide, ...recentRides] : recentRides;
@@ -85,6 +120,7 @@ export default function App() {
       setDropoff(location);
     }
     setFare(null);
+    setPendingPin(null);
     setLocationQuery('');
   }
 
@@ -92,6 +128,7 @@ export default function App() {
     setPickup(dropoff);
     setDropoff(pickup);
     setFare(null);
+    setPendingPin(null);
     setActiveRouteField(activeRouteField === 'pickup' ? 'dropoff' : 'pickup');
   }
 
@@ -117,6 +154,7 @@ export default function App() {
       setPickup(currentLocation);
       setActiveRouteField('dropoff');
       setFare(null);
+      setPendingPin(null);
     } catch {
       Alert.alert('Could not get location', 'Check location services and try again.');
     } finally {
@@ -133,6 +171,29 @@ export default function App() {
     } else {
       setDropoff(nudged);
     }
+    setFare(null);
+    setPendingPin(null);
+  }
+
+  function handleMapTap(location: LocationPoint) {
+    setPendingPin({
+      field: activeRouteField,
+      location
+    });
+  }
+
+  function handleConfirmPendingPin() {
+    if (!pendingPin) {
+      return;
+    }
+
+    if (pendingPin.field === 'pickup') {
+      setPickup(pendingPin.location);
+      setActiveRouteField('dropoff');
+    } else {
+      setDropoff(pendingPin.location);
+    }
+    setPendingPin(null);
     setFare(null);
   }
 
@@ -154,7 +215,10 @@ export default function App() {
         routeCoordinates: []
       };
       setFare(fallback);
-      Alert.alert('Backend offline', 'Showing a local estimate. Start the backend to book a real ride.');
+      Alert.alert(
+        'Backend offline',
+        `Showing a local estimate. Start the backend and make sure Expo can reach ${apiUrl}.`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -183,7 +247,7 @@ export default function App() {
       setTab('rides');
     } catch {
       setApiStatus('offline');
-      Alert.alert('Could not book ride', 'Start the backend with npm run backend, then try again.');
+      Alert.alert('Could not book ride', `Start the backend and make sure Expo can reach ${apiUrl}.`);
     } finally {
       setIsLoading(false);
     }
@@ -192,22 +256,23 @@ export default function App() {
   const canBook = pickup.id !== dropoff.id && !isLoading;
 
   return (
-    <SafeAreaView style={styles.shell}>
-      <StatusBar barStyle="dark-content" />
+    <PaperProvider theme={paperTheme}>
+      <SafeAreaView style={styles.shell}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.brand}>Tricycall</Text>
           <Text style={styles.subtitle}>Barangay tricycle rides, dispatched fast.</Text>
         </View>
-        <View style={[styles.statusPill, apiStatus === 'offline' && styles.statusPillOffline]}>
-          <View style={[styles.statusDot, apiStatus === 'offline' && styles.statusDotOffline]} />
-          <Text style={styles.statusText}>{apiStatus === 'offline' ? 'Offline' : 'Ready'}</Text>
-        </View>
-      </View>
-
-      <View style={styles.tabs}>
-        <TabButton icon="navigate" label="Book" isActive={tab === 'book'} onPress={() => setTab('book')} />
-        <TabButton icon="receipt" label="Rides" isActive={tab === 'rides'} onPress={() => setTab('rides')} />
+        <Chip
+          compact
+          icon={apiStatus === 'offline' ? 'cloud-off-outline' : 'check-circle-outline'}
+          mode="flat"
+          style={[styles.statusPill, apiStatus === 'offline' && styles.statusPillOffline]}
+          textStyle={styles.statusText}
+        >
+          {apiStatus === 'offline' ? 'Offline' : 'Ready'}
+        </Chip>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -218,15 +283,16 @@ export default function App() {
               dropoff={dropoff}
               fare={fare}
               activeField={activeRouteField}
-              onPinpoint={location => {
-                if (activeRouteField === 'pickup') {
-                  setPickup(location);
-                } else {
-                  setDropoff(location);
-                }
-                setFare(null);
-              }}
+              pendingPin={pendingPin}
+              onMapTap={handleMapTap}
             />
+            {pendingPin ? (
+              <PendingPinPanel
+                pendingPin={pendingPin}
+                onCancel={() => setPendingPin(null)}
+                onConfirm={handleConfirmPendingPin}
+              />
+            ) : null}
 
             <RouteSelector
               pickup={pickup}
@@ -245,21 +311,23 @@ export default function App() {
 
             <View style={styles.formRow}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Passenger</Text>
-                <TextInput
+                <PaperTextInput
                   value={passengerName}
                   onChangeText={setPassengerName}
-                  placeholder="Passenger name"
+                  label="Passenger"
+                  mode="outlined"
                   style={styles.input}
+                  outlineStyle={styles.paperInputOutline}
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Notes</Text>
-                <TextInput
+                <PaperTextInput
                   value={notes}
                   onChangeText={setNotes}
-                  placeholder="Gate, landmark"
+                  label="Notes"
+                  mode="outlined"
                   style={styles.input}
+                  outlineStyle={styles.paperInputOutline}
                 />
               </View>
             </View>
@@ -267,24 +335,30 @@ export default function App() {
             <FarePanel fare={fare} isLoading={isLoading} />
 
             <View style={styles.actions}>
-              <Pressable style={styles.secondaryButton} onPress={handleEstimate} disabled={isLoading}>
-                <Ionicons name="calculator" size={18} color={colors.primary} />
-                <Text style={styles.secondaryButtonText}>Estimate fare</Text>
-              </Pressable>
-              <Pressable
+              <PaperButton
+                mode="outlined"
+                icon="calculator"
+                onPress={handleEstimate}
+                disabled={isLoading}
+                style={styles.secondaryButton}
+                labelStyle={styles.secondaryButtonText}
+                textColor={colors.primary}
+              >
+                Estimate fare
+              </PaperButton>
+              <PaperButton
+                mode="contained"
+                icon="rickshaw"
+                loading={isLoading}
                 style={[styles.primaryButton, !canBook && styles.disabledButton]}
                 onPress={handleBookRide}
                 disabled={!canBook}
+                labelStyle={styles.primaryButtonText}
+                buttonColor={colors.accent}
+                textColor={colors.accentText}
               >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.accentText} />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="rickshaw" size={20} color={colors.accentText} />
-                    <Text style={styles.primaryButtonText}>Call tricycle</Text>
-                  </>
-                )}
-              </Pressable>
+                Call tricycle
+              </PaperButton>
             </View>
           </>
         ) : (
@@ -302,20 +376,24 @@ export default function App() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Nearby tricycles</Text>
           {nearbyDrivers.map(driver => (
-            <View key={driver.id} style={styles.driverRow}>
-              <View style={styles.driverIcon}>
-                <MaterialCommunityIcons name="rickshaw" size={22} color={colors.primary} />
-              </View>
-              <View style={styles.driverCopy}>
-                <Text style={styles.driverName}>{driver.name}</Text>
-                <Text style={styles.mutedText}>{driver.tricycleNumber} - {driver.plateNumber}</Text>
-              </View>
-              <Text style={styles.etaText}>{driver.etaMinutes} min</Text>
-            </View>
+            <Card key={driver.id} mode="outlined" style={styles.driverRow}>
+              <Card.Content style={styles.driverRowContent}>
+                <View style={styles.driverIcon}>
+                  <MaterialCommunityIcons name="rickshaw" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.driverCopy}>
+                  <Text style={styles.driverName}>{driver.name}</Text>
+                  <Text style={styles.mutedText}>{driver.tricycleNumber} - {driver.plateNumber}</Text>
+                </View>
+                <Text style={styles.etaText}>{driver.etaMinutes} min</Text>
+              </Card.Content>
+            </Card>
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+      <BottomMenu activeTab={tab} onTabChange={setTab} />
+      </SafeAreaView>
+    </PaperProvider>
   );
 }
 
@@ -346,11 +424,46 @@ function nudgeLocation(location: LocationPoint, field: RouteField, direction: Pi
   });
 }
 
-function TabButton(props: { icon: 'navigate' | 'receipt'; label: string; isActive: boolean; onPress: () => void }) {
+function BottomMenu(props: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
   return (
-    <Pressable style={[styles.tabButton, props.isActive && styles.tabButtonActive]} onPress={props.onPress}>
-      <Ionicons name={props.icon} size={18} color={props.isActive ? colors.primary : colors.muted} />
-      <Text style={[styles.tabText, props.isActive && styles.tabTextActive]}>{props.label}</Text>
+    <View style={styles.bottomMenu}>
+      <BottomMenuItem
+        icon="navigation-variant"
+        label="Book"
+        isActive={props.activeTab === 'book'}
+        onPress={() => props.onTabChange('book')}
+      />
+      <BottomMenuItem
+        icon="receipt"
+        label="Rides"
+        isActive={props.activeTab === 'rides'}
+        onPress={() => props.onTabChange('rides')}
+      />
+    </View>
+  );
+}
+
+function BottomMenuItem(props: {
+  icon: 'navigation-variant' | 'receipt';
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: props.isActive }}
+      onPress={props.onPress}
+      style={[styles.bottomMenuItem, props.isActive && styles.bottomMenuItemActive]}
+    >
+      <MaterialCommunityIcons
+        name={props.icon}
+        size={22}
+        color={props.isActive ? colors.white : colors.primary}
+      />
+      <Text style={[styles.bottomMenuLabel, props.isActive && styles.bottomMenuLabelActive]}>
+        {props.label}
+      </Text>
     </Pressable>
   );
 }
@@ -373,7 +486,8 @@ function RouteSelector(props: {
   const selectedLocation = props.activeField === 'pickup' ? props.pickup : props.dropoff;
 
   return (
-    <View style={styles.routeCard}>
+    <Card mode="outlined" style={styles.routeCard}>
+      <Card.Content style={styles.routeCardContent}>
       <View style={styles.routeRows}>
         <View style={styles.routeTimeline}>
           <View style={styles.pickupDotSmall} />
@@ -403,18 +517,18 @@ function RouteSelector(props: {
       </View>
 
       <View style={styles.pinTools}>
-        <Pressable
+        <PaperButton
+          mode="contained-tonal"
+          icon="crosshairs-gps"
+          loading={props.isLocating}
           style={[styles.currentLocationButton, props.isLocating && styles.disabledButton]}
           onPress={props.onUseCurrentLocation}
           disabled={props.isLocating}
+          labelStyle={styles.currentLocationText}
+          textColor={colors.primary}
         >
-          {props.isLocating ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Ionicons name="locate" size={18} color={colors.primary} />
-          )}
-          <Text style={styles.currentLocationText}>Use my location</Text>
-        </Pressable>
+          Use my location
+        </PaperButton>
 
         <View style={styles.coordinatePill}>
           <Ionicons name="pin" size={15} color={colors.muted} />
@@ -436,16 +550,15 @@ function RouteSelector(props: {
         </View>
       </View>
 
-      <View style={styles.searchBox}>
-        <Ionicons name="search" size={18} color={colors.muted} />
-        <TextInput
-          value={props.query}
-          onChangeText={props.onQueryChange}
-          placeholder={prompt}
-          placeholderTextColor={colors.muted}
-          style={styles.searchInput}
-        />
-      </View>
+      <PaperTextInput
+        value={props.query}
+        onChangeText={props.onQueryChange}
+        label={prompt}
+        mode="outlined"
+        left={<PaperTextInput.Icon icon="magnify" color={colors.muted} />}
+        style={styles.searchInput}
+        outlineStyle={styles.paperInputOutline}
+      />
 
       <View style={styles.suggestionHeader}>
         <Text style={styles.suggestionTitle}>{props.query ? 'Matching places' : 'Suggested places'}</Text>
@@ -481,7 +594,8 @@ function RouteSelector(props: {
           </View>
         ) : null}
       </View>
-    </View>
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -517,21 +631,53 @@ function RouteFieldButton(props: {
   );
 }
 
+function PendingPinPanel(props: {
+  pendingPin: PendingPin;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const fieldLabel = props.pendingPin.field === 'pickup' ? 'pickup' : 'drop-off';
+
+  return (
+    <Card mode="outlined" style={styles.pendingPinPanel}>
+      <Card.Content style={styles.pendingPinContent}>
+      <View style={styles.pendingPinIcon}>
+        <Ionicons name={props.pendingPin.field === 'pickup' ? 'navigate' : 'location'} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.pendingPinCopy}>
+        <Text style={styles.pendingPinTitle}>Set this as {fieldLabel}</Text>
+        <Text style={styles.pendingPinMeta}>
+          {props.pendingPin.location.lat.toFixed(5)}, {props.pendingPin.location.lng.toFixed(5)}
+        </Text>
+      </View>
+      <PaperButton mode="outlined" compact style={styles.pendingCancelButton} labelStyle={styles.pendingCancelText} onPress={props.onCancel}>
+        Cancel
+      </PaperButton>
+      <PaperButton mode="contained" compact style={styles.pendingConfirmButton} labelStyle={styles.pendingConfirmText} onPress={props.onConfirm}>
+        Set
+      </PaperButton>
+      </Card.Content>
+    </Card>
+  );
+}
+
 function MapPanel(props: {
   pickup: LocationPoint;
   dropoff: LocationPoint;
   fare: FareEstimate | null;
   activeField: RouteField;
-  onPinpoint: (location: LocationPoint) => void;
+  pendingPin: PendingPin | null;
+  onMapTap: (location: LocationPoint) => void;
 }) {
   const isOsrmRoute = props.fare?.source === 'OSRM';
   const leafletHtml = useMemo(
     () => buildLeafletHtml({
       pickup: props.pickup,
       dropoff: props.dropoff,
+      pendingPin: props.pendingPin,
       routeCoordinates: props.fare?.routeCoordinates ?? []
     }),
-    [props.dropoff, props.fare?.routeCoordinates, props.pickup]
+    [props.dropoff, props.fare?.routeCoordinates, props.pendingPin, props.pickup]
   );
 
   useEffect(() => {
@@ -548,7 +694,7 @@ function MapPanel(props: {
 
     window.addEventListener('message', handleWindowMessage);
     return () => window.removeEventListener('message', handleWindowMessage);
-  }, [props.activeField, props.onPinpoint]);
+  }, [props.activeField, props.onMapTap]);
 
   function handleMapMessage(event: WebViewMessageEvent) {
     handleMapPayload(event.nativeEvent.data);
@@ -561,7 +707,7 @@ function MapPanel(props: {
         return;
       }
 
-      props.onPinpoint(createPinnedLocation({
+      props.onMapTap(createPinnedLocation({
         field: props.activeField,
         name: `Pinned ${props.activeField === 'pickup' ? 'pickup' : 'drop-off'}`,
         lat: Number(payload.lat),
@@ -604,7 +750,7 @@ function MapPanel(props: {
         <Text style={styles.routeText}>{props.pickup.name}</Text>
         <Ionicons name="arrow-down" size={16} color={colors.muted} />
         <Text style={styles.routeText}>{props.dropoff.name}</Text>
-        <Text style={styles.routeHint}>Tap map to set {props.activeField === 'pickup' ? 'pickup' : 'drop-off'} pin</Text>
+        <Text style={styles.routeHint}>Tap map to preview {props.activeField === 'pickup' ? 'pickup' : 'drop-off'} pin</Text>
       </View>
     </View>
   );
@@ -613,6 +759,7 @@ function MapPanel(props: {
 function buildLeafletHtml(input: {
   pickup: LocationPoint;
   dropoff: LocationPoint;
+  pendingPin: PendingPin | null;
   routeCoordinates: Array<{ lat: number; lng: number }>;
 }) {
   const centerLat = (input.pickup.lat + input.dropoff.lat) / 2;
@@ -632,6 +779,7 @@ function buildLeafletHtml(input: {
     .pin { width: 28px; height: 28px; border-radius: 14px; display: grid; place-items: center; color: ${colors.white}; font-weight: 800; border: 3px solid ${colors.white}; box-shadow: 0 4px 10px rgba(0,0,0,.22); }
     .pickup { background: ${colors.success}; }
     .dropoff { background: ${colors.danger}; }
+    .pending { background: ${colors.accent}; color: ${colors.accentText}; border-color: ${colors.primary}; }
   </style>
 </head>
 <body>
@@ -640,6 +788,12 @@ function buildLeafletHtml(input: {
   <script>
     const pickup = ${JSON.stringify({ lat: input.pickup.lat, lng: input.pickup.lng, name: input.pickup.name })};
     const dropoff = ${JSON.stringify({ lat: input.dropoff.lat, lng: input.dropoff.lng, name: input.dropoff.name })};
+    const pendingPin = ${JSON.stringify(input.pendingPin ? {
+      lat: input.pendingPin.location.lat,
+      lng: input.pendingPin.location.lng,
+      name: input.pendingPin.location.name,
+      field: input.pendingPin.field
+    } : null)};
     const route = ${JSON.stringify(route)};
     const map = L.map('map', { zoomControl: false }).setView([${centerLat}, ${centerLng}], 15);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -649,8 +803,12 @@ function buildLeafletHtml(input: {
 
     const pickupIcon = L.divIcon({ html: '<div class="pin pickup">P</div>', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
     const dropoffIcon = L.divIcon({ html: '<div class="pin dropoff">D</div>', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
+    const pendingIcon = L.divIcon({ html: '<div class="pin pending">' + (pendingPin?.field === 'pickup' ? 'P' : 'D') + '</div>', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
     L.marker([pickup.lat, pickup.lng], { icon: pickupIcon }).addTo(map).bindTooltip(pickup.name);
     L.marker([dropoff.lat, dropoff.lng], { icon: dropoffIcon }).addTo(map).bindTooltip(dropoff.name);
+    if (pendingPin) {
+      L.marker([pendingPin.lat, pendingPin.lng], { icon: pendingIcon }).addTo(map).bindTooltip('Preview ' + (pendingPin.field === 'pickup' ? 'pickup' : 'drop-off'));
+    }
 
     const polyline = L.polyline(route.map(point => [point.lat, point.lng]), { color: '${colors.primary}', weight: 5, opacity: 0.9 }).addTo(map);
     map.fitBounds(polyline.getBounds().pad(0.35), { animate: false });
@@ -670,7 +828,8 @@ function buildLeafletHtml(input: {
 
 function FarePanel(props: { fare: FareEstimate | null; isLoading: boolean }) {
   return (
-    <View style={styles.farePanel}>
+    <Card mode="outlined" style={styles.farePanel}>
+      <Card.Content style={styles.farePanelContent}>
       <View>
         <Text style={styles.label}>Estimated fare</Text>
         <Text style={styles.fareText}>
@@ -689,17 +848,21 @@ function FarePanel(props: { fare: FareEstimate | null; isLoading: boolean }) {
         <Text style={styles.metricValue}>{props.fare?.source === 'OSRM' ? 'OSRM' : 'Local'}</Text>
         <Text style={styles.metricLabel}>Basis</Text>
       </View>
-      {props.isLoading ? <ActivityIndicator color={colors.primary} /> : null}
-    </View>
+      {props.isLoading ? <PaperActivityIndicator color={colors.primary} /> : null}
+      </Card.Content>
+    </Card>
   );
 }
 
 function ActiveRide({ ride }: { ride: Ride }) {
   return (
-    <View style={styles.activeRide}>
+    <Card mode="outlined" style={styles.activeRide}>
+      <Card.Content>
       <View style={styles.activeRideHeader}>
         <Text style={styles.sectionTitle}>Active ride</Text>
-        <Text style={styles.statusBadge}>{ride.status.replace('_', ' ')}</Text>
+        <Chip compact style={styles.statusBadge} textStyle={styles.statusBadgeText}>
+          {ride.status.replace('_', ' ')}
+        </Chip>
       </View>
       <Text style={styles.activeRoute}>{ride.pickup.name} to {ride.dropoff.name}</Text>
       <Text style={styles.mutedText}>
@@ -717,23 +880,27 @@ function ActiveRide({ ride }: { ride: Ride }) {
         </View>
         <Text style={styles.etaText}>{ride.etaMinutes} min</Text>
       </View>
-    </View>
+      </Card.Content>
+    </Card>
   );
 }
 
 function EmptyRideState() {
   return (
-    <View style={styles.emptyState}>
+    <Card mode="outlined" style={styles.emptyState}>
+      <Card.Content style={styles.emptyStateContent}>
       <MaterialCommunityIcons name="rickshaw-electric" size={34} color={colors.primary} />
       <Text style={styles.emptyTitle}>No active ride</Text>
       <Text style={styles.mutedText}>Book a tricycle and your driver details will appear here.</Text>
-    </View>
+      </Card.Content>
+    </Card>
   );
 }
 
 function RideRow({ ride }: { ride: Ride }) {
   return (
-    <View style={styles.rideRow}>
+    <Card mode="outlined" style={styles.rideRow}>
+      <Card.Content style={styles.rideRowContent}>
       <View>
         <Text style={styles.rideRoute}>{ride.pickup.name} to {ride.dropoff.name}</Text>
         <Text style={styles.mutedText}>
@@ -741,40 +908,49 @@ function RideRow({ ride }: { ride: Ride }) {
         </Text>
       </View>
       <Text style={styles.rideFare}>{ride.currency} {ride.fare}</Text>
-    </View>
+      </Card.Content>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   shell: {
     flex: 1,
-    backgroundColor: colors.background
+    backgroundColor: colors.primary
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 14,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12
   },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0
+  },
   brand: {
-    color: colors.text,
-    fontSize: 30,
+    color: colors.white,
+    fontSize: 32,
+    lineHeight: 36,
     fontWeight: '800'
   },
   subtitle: {
-    color: colors.muted,
+    color: colors.primarySoft,
     fontSize: 13,
     marginTop: 2
   },
   statusPill: {
-    minWidth: 82,
+    width: 108,
+    height: 42,
+    flexShrink: 0,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: colors.successSoft,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    backgroundColor: colors.white,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -783,75 +959,70 @@ const styles = StyleSheet.create({
   statusPillOffline: {
     backgroundColor: colors.dangerSoft
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.success
-  },
-  statusDotOffline: {
-    backgroundColor: colors.warning
-  },
   statusText: {
-    color: colors.text,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '700'
   },
-  tabs: {
-    marginHorizontal: 20,
-    padding: 4,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 8,
-    flexDirection: 'row'
+  content: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    gap: 14,
+    paddingBottom: 112,
+    backgroundColor: colors.background
   },
-  tabButton: {
+  bottomMenu: {
+    minHeight: 76,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: 'row',
+    gap: 10
+  },
+  bottomMenuItem: {
     flex: 1,
-    minHeight: 42,
-    borderRadius: 6,
+    minHeight: 54,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6
+    gap: 3
   },
-  tabButtonActive: {
-    backgroundColor: colors.surface
+  bottomMenuItemActive: {
+    backgroundColor: colors.primary
   },
-  tabText: {
-    color: colors.muted,
-    fontWeight: '700'
+  bottomMenuLabel: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900'
   },
-  tabTextActive: {
-    color: colors.primary
-  },
-  content: {
-    padding: 20,
-    gap: 18,
-    paddingBottom: 32
+  bottomMenuLabelActive: {
+    color: colors.white
   },
   mapPanel: {
-    minHeight: 248,
+    minHeight: 358,
+    width: '100%',
+    alignSelf: 'stretch',
     backgroundColor: colors.surface,
     borderRadius: 8,
     overflow: 'hidden',
-    flexDirection: 'row',
     borderWidth: 1,
     borderColor: colors.border
   },
   leafletFrame: {
-    flex: 1,
-    minHeight: 248,
+    minHeight: 252,
     backgroundColor: colors.mapCanvas
   },
   leafletWebView: {
-    flex: 1,
-    minHeight: 248,
+    minHeight: 252,
     backgroundColor: colors.mapCanvas
   },
   routeSummary: {
-    width: 146,
-    padding: 14,
+    width: '100%',
+    padding: 12,
     backgroundColor: colors.surface,
-    justifyContent: 'center',
     gap: 8
   },
   routeBadge: {
@@ -879,9 +1050,74 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 11,
     fontWeight: '700',
-    lineHeight: 15
+    lineHeight: 15,
+    maxWidth: 300
+  },
+  pendingPinPanel: {
+    minHeight: 68,
+    width: '100%',
+    alignSelf: 'stretch',
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderColor: colors.border
+  },
+  pendingPinContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  pendingPinIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pendingPinCopy: {
+    flex: 1
+  },
+  pendingPinTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  pendingPinMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2
+  },
+  pendingCancelButton: {
+    minHeight: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pendingCancelText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  pendingConfirmButton: {
+    minHeight: 38,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pendingConfirmText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '900'
   },
   section: {
+    width: '100%',
+    alignSelf: 'stretch',
     gap: 10
   },
   sectionTitle: {
@@ -890,11 +1126,13 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
   routeCard: {
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
+    borderColor: colors.border
+  },
+  routeCardContent: {
     gap: 12
   },
   routeRows: {
@@ -926,6 +1164,7 @@ const styles = StyleSheet.create({
   },
   routeFields: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 8,
     backgroundColor: colors.surfaceTint,
     overflow: 'hidden'
@@ -975,12 +1214,12 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong
   },
   pinTools: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     gap: 8
   },
   currentLocationButton: {
-    flex: 1,
+    width: '100%',
     minHeight: 42,
     borderRadius: 8,
     backgroundColor: colors.primarySoft,
@@ -998,7 +1237,7 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   coordinatePill: {
-    flex: 1.15,
+    width: '100%',
     minHeight: 42,
     borderRadius: 8,
     backgroundColor: colors.surfaceTint,
@@ -1043,22 +1282,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  searchBox: {
-    minHeight: 46,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 8
-  },
   searchInput: {
     flex: 1,
-    color: colors.text,
-    fontSize: 15,
-    minHeight: 44
+    backgroundColor: colors.surface
   },
   suggestionHeader: {
     flexDirection: 'row',
@@ -1127,10 +1353,12 @@ const styles = StyleSheet.create({
   },
   formRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12
   },
   inputGroup: {
     flex: 1,
+    minWidth: 150,
     gap: 6
   },
   label: {
@@ -1141,24 +1369,27 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 46,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: 12,
     color: colors.text
+  },
+  paperInputOutline: {
+    borderRadius: 8,
+    borderColor: colors.border
   },
   farePanel: {
     minHeight: 84,
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
     backgroundColor: colors.surface,
-    padding: 14,
+    borderColor: colors.border
+  },
+  farePanelContent: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: colors.border
+    gap: 10
   },
   fareText: {
     color: colors.text,
@@ -1181,10 +1412,12 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12
   },
   primaryButton: {
     flex: 1.15,
+    minWidth: 156,
     minHeight: 50,
     borderRadius: 8,
     backgroundColor: colors.accent,
@@ -1195,6 +1428,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
+    minWidth: 144,
     minHeight: 50,
     borderRadius: 8,
     borderWidth: 1,
@@ -1220,9 +1454,12 @@ const styles = StyleSheet.create({
   },
   driverRow: {
     minHeight: 66,
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
-    backgroundColor: colors.surface,
-    padding: 12,
+    backgroundColor: colors.surface
+  },
+  driverRowContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12
@@ -1261,9 +1498,10 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   activeRide: {
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
-    backgroundColor: colors.surface,
-    padding: 14
+    backgroundColor: colors.surface
   },
   activeRideHeader: {
     flexDirection: 'row',
@@ -1272,11 +1510,11 @@ const styles = StyleSheet.create({
     gap: 10
   },
   statusBadge: {
-    color: colors.accentText,
     backgroundColor: colors.accent,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 999
+  },
+  statusBadgeText: {
+    color: colors.accentText,
     fontSize: 11,
     fontWeight: '900'
   },
@@ -1288,11 +1526,15 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     minHeight: 140,
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surface
+  },
+  emptyStateContent: {
+    minHeight: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 18,
     gap: 7
   },
   emptyTitle: {
@@ -1302,9 +1544,12 @@ const styles = StyleSheet.create({
   },
   rideRow: {
     minHeight: 64,
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: 8,
-    backgroundColor: colors.surface,
-    padding: 12,
+    backgroundColor: colors.surface
+  },
+  rideRowContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

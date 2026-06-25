@@ -3,11 +3,30 @@
   "private": true,
   "workspaces": [
     "tricycall/mobile",
+    "tricycall/rider",
+    "tricycall/admin",
     "tricycall/backend"
   ],
+  "overrides": {
+    "expo": "54.0.35",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5"
+  },
   "scripts": {
     "mobile": "npm --workspace tricycall/mobile run start",
+    "rider": "npm --workspace tricycall/rider run start",
+    "admin": "npm --workspace tricycall/admin run start",
     "backend": "npm --workspace tricycall/backend run dev",
     "test:backend": "npm --workspace tricycall/backend test"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "babel-preset-expo": "~54.0.11",
+    "expo": "54.0.35",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "~5.9.2"
   }
 }

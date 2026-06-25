@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Tricycall Rider",
+    "slug": "tricycall-rider",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Tricycall Rider uses your location to join and refresh TODA queue status."
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#B42318"
+      }
+    },
+    "extra": {
+      "apiUrl": "http://localhost:4000"
+    }
+  }
+}

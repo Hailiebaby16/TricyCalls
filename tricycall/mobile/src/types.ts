@@ -25,7 +25,7 @@ export type FareEstimate = {
   routeCoordinates: Array<{ lat: number; lng: number }>;
 };
 
-export type RideStatus = 'REQUESTED' | 'ASSIGNED' | 'PICKED_UP' | 'COMPLETED' | 'CANCELLED';
+export type RideStatus = 'REQUESTED' | 'OFFERED' | 'ASSIGNED' | 'PICKED_UP' | 'COMPLETED' | 'CANCELLED';
 
 export type Ride = {
   id: string;
@@ -35,6 +35,16 @@ export type Ride = {
   dropoff: LocationPoint;
   notes: string;
   driver: Driver | null;
+  todaId?: string | null;
+  dispatchSource?: string;
+  offer?: {
+    driverId: string;
+    status: 'pending';
+    offeredAt: string;
+    expiresAt: string;
+    candidateDriverIds: string[];
+    offerIndex: number;
+  } | null;
   fare: number;
   currency: 'PHP';
   distanceKm: number;

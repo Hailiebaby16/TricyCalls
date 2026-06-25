@@ -16,7 +16,8 @@ export const drivers = [
     tricycleNumber: 'Unit 18',
     rating: 4.9,
     etaMinutes: 4,
-    status: 'AVAILABLE'
+    status: 'AVAILABLE',
+    todaId: 'toda-echague-town-center'
   },
   {
     id: 'driver-2',
@@ -25,7 +26,8 @@ export const drivers = [
     tricycleNumber: 'Unit 27',
     rating: 4.8,
     etaMinutes: 6,
-    status: 'AVAILABLE'
+    status: 'AVAILABLE',
+    todaId: 'toda-echague-town-center'
   },
   {
     id: 'driver-3',
@@ -34,6 +36,39 @@ export const drivers = [
     tricycleNumber: 'Unit 09',
     rating: 4.7,
     etaMinutes: 8,
-    status: 'BUSY'
+    status: 'BUSY',
+    todaId: 'toda-echague-town-center'
+  }
+];
+
+export const todas = [
+  {
+    id: 'toda-echague-town-center',
+    name: 'Echague Town Center TODA',
+    description: 'Demo TODA serving Echague town center, municipal hall, market, and nearby terminal trips.',
+    active: true,
+    assignedDriverIds: ['driver-1', 'driver-2', 'driver-3'],
+    serviceZone: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [121.6737, 16.6984],
+          [121.6868, 16.6984],
+          [121.6868, 16.7082],
+          [121.6737, 16.7082],
+          [121.6737, 16.6984]
+        ]
+      ]
+    },
+    terminalZone: {
+      center: { type: 'Point', coordinates: [121.67595, 16.70055] },
+      radiusMeters: 450
+    },
+    queueZone: {
+      center: { type: 'Point', coordinates: [121.67595, 16.70055] },
+      radiusMeters: 120
+    },
+    fallbackEnabled: true,
+    bookingTimeoutSeconds: 30
   }
 ];

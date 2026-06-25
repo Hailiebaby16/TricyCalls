@@ -1,6 +1,6 @@
 import type { CreateRideInput, FareEstimate, LocationPoint, Ride } from '../types';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
+export const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type FareEstimateInput = {
   pickup: LocationPoint;

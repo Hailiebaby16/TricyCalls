@@ -31,7 +31,18 @@ test('API creates and lists rides', async () => {
     const created = await createResponse.json();
 
     assert.equal(createResponse.status, 201);
-    assert.equal(created.status, 'ASSIGNED');
+    assert.equal(created.status, 'OFFERED');
+    assert.equal(created.driver.id, 'driver-1');
+
+    const acceptResponse = await fetch(`${baseUrl}/api/rides/${created.id}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driverId: created.driver.id })
+    });
+    const accepted = await acceptResponse.json();
+
+    assert.equal(acceptResponse.status, 200);
+    assert.equal(accepted.status, 'ASSIGNED');
 
     const listResponse = await fetch(`${baseUrl}/api/rides`);
     const list = await listResponse.json();
